@@ -9,6 +9,7 @@ pub const Asteroid = struct {
     velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
     size: Size,
     seed: u64,
+    remove: bool = false,
 
     pub fn update(self: *Asteroid, dim: ?rl.Vector2) void {
         // applying the velocity to the position

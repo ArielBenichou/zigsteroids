@@ -4,6 +4,7 @@ pub const Particle = struct {
     position: rl.Vector2,
     velocity: rl.Vector2,
     ttl: f32,
+    color: rl.Color,
 
     values: union(enum) {
         line: struct {

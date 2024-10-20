@@ -144,15 +144,26 @@ fn update() !void {
         state.ship.update(delta, SCREEN_SIZE);
     }
 
-    // Asteroids
-    for (state.asteroids.items) |*asteroid| {
-        asteroid.update(SCREEN_SIZE);
+    // Projectiles
+    {
+        var i: usize = 0;
+        while (i < state.projectile.items.len) : (i += 1) {
+            var projectile = &state.projectile.items[i];
+            projectile.update(delta, null);
 
-        // Collision /w ship not mid mega-burst
-        if (!state.ship.is_using_mega_fuel and asteroid.position.distance(state.ship.position) < asteroid.size.hitbox()) {
-            if (!state.ship.isDead()) {
-                state.ship.death_timestamp = now;
-                try spawnDeathParticles();
+            // Collision /w asteroids
+            for (state.asteroids.items) |*asteroid| {
+                if (asteroid.position.distance(projectile.position) < asteroid.size.hitbox()) {
+                    if (!asteroid.remove) {
+                        asteroid.remove = true;
+                        projectile.ttl = 0;
+                        try spawnExplosionParticles(asteroid.position, rl.Color.brown);
+                    }
+                }
+            }
+
+            if (projectile.ttl <= 0) {
+                _ = state.projectile.swapRemove(i);
             }
         }
     }
@@ -163,20 +174,30 @@ fn update() !void {
         while (i < state.particles.items.len) : (i += 1) {
             var particle = &state.particles.items[i];
             particle.update(delta, null);
+
             if (particle.ttl <= 0) {
                 _ = state.particles.swapRemove(i);
             }
         }
     }
 
-    // Projectiles
+    // Asteroids
     {
         var i: usize = 0;
-        while (i < state.projectile.items.len) : (i += 1) {
-            var projectile = &state.projectile.items[i];
-            projectile.update(delta, null);
-            if (projectile.ttl <= 0) {
-                _ = state.projectile.swapRemove(i);
+        while (i < state.asteroids.items.len) : (i += 1) {
+            const asteroid = &state.asteroids.items[i];
+            asteroid.update(SCREEN_SIZE);
+
+            // Collision /w ship not mid mega-burst
+            if (!state.ship.is_using_mega_fuel and asteroid.position.distance(state.ship.position) < asteroid.size.hitbox()) {
+                if (!state.ship.isDead()) {
+                    state.ship.death_timestamp = now;
+                    try spawnExplosionParticles(state.ship.position, null);
+                }
+            }
+
+            if (asteroid.remove) {
+                _ = state.asteroids.swapRemove(i);
             }
         }
     }
@@ -255,14 +276,6 @@ fn render(drawing: *const Drawing) void {
 
     // DRAWING PARTICLES
     for (state.particles.items) |particle| {
-        const random_int = state.random.intRangeLessThan(usize, 0, 4);
-        const color: rl.Color = p_color: {
-            if (random_int == 1) break :p_color rl.Color.red;
-            if (random_int == 2) break :p_color rl.Color.orange;
-            if (random_int == 3) break :p_color rl.Color.yellow;
-            break :p_color rl.Color.white;
-        };
-
         switch (particle.values) {
             .line => |line| {
                 drawing.drawLines(
@@ -273,14 +286,14 @@ fn render(drawing: *const Drawing) void {
                         Vector2.init(-0.5, 0),
                         Vector2.init(0.5, 0),
                     },
-                    color,
+                    particle.color,
                 );
             },
             .dot => |dot| {
                 rl.drawCircleV(
                     particle.position,
                     dot.radius,
-                    color,
+                    particle.color,
                 );
             },
         }
@@ -356,13 +369,21 @@ fn drawAsteroid(drawing: *const Drawing, pos: Vector2, size: Asteroid.Size, seed
     );
 }
 
-fn spawnDeathParticles() !void {
+fn spawnExplosionParticles(origin: Vector2, color: ?rl.Color) !void {
     const points_len = 100;
     for (0..points_len) |_| {
+        const random_int = state.random.intRangeLessThan(usize, 0, 4);
+        const p_color: rl.Color = color orelse p_color: {
+            if (random_int == 1) break :p_color rl.Color.red;
+            if (random_int == 2) break :p_color rl.Color.orange;
+            if (random_int == 3) break :p_color rl.Color.yellow;
+            break :p_color rl.Color.white;
+        };
         const random_angle = std.math.tau * state.random.float(f32);
         try state.particles.append(.{
             .ttl = state.random.float(f32) * 3.0,
-            .position = state.ship.position,
+            .color = p_color,
+            .position = origin,
             .velocity = mathx.Vector2
                 .fromAngle(random_angle)
                 .scale(@floatFromInt(state.random.intRangeLessThan(usize, 5, 15))),

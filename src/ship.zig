@@ -8,6 +8,7 @@ pub const Ship = struct {
     position: rl.Vector2 = .{ .x = 0, .y = 0 },
     rotation: f32 = 0,
     mega_fuel: f32 = 1,
+    is_using_mega_fuel: bool = false,
 
     drag: f32 = 0.03, // less drag is more chanllenging to manuver
     speed_turn: f32 = 1,
@@ -23,10 +24,11 @@ pub const Ship = struct {
 
     /// change the ship velocity
     pub fn addThrust(self: *Ship, delta: f32, with_mega_fuel: bool) void {
-        const is_using_mega_fuel: f32 = @floatFromInt(@intFromBool(with_mega_fuel and self.mega_fuel > 0.0));
-        self.mega_fuel -= delta * is_using_mega_fuel;
+        self.is_using_mega_fuel = with_mega_fuel and self.mega_fuel > 0.0;
+        const mega_fuel_mod: f32 = @floatFromInt(@intFromBool(self.is_using_mega_fuel));
+        self.mega_fuel -= delta * mega_fuel_mod * 2;
         self.velocity = self.velocity.add(
-            self.getShipDirection().scale((self.speed_forward * (is_using_mega_fuel + 1.0)) * delta),
+            self.getShipDirection().scale((self.speed_forward * (mega_fuel_mod + 1.0)) * delta),
         );
     }
 

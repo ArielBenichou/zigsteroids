@@ -5,6 +5,7 @@ const Vector2 = rl.Vector2;
 const Drawing = @import("drawing.zig").Drawing;
 const State = @import("state.zig").State;
 const Asteroid = @import("asteroid.zig").Asteroid;
+const Particle = @import("particle.zig").Particle;
 const constants = @import("constants.zig");
 
 const SCREEN_SIZE = constants.SCREEN_SIZE;
@@ -46,20 +47,22 @@ pub fn main() !void {
     state = .{
         .ship = undefined,
         .asteroids = std.ArrayList(Asteroid).init(allocator),
+        .particles = std.ArrayList(Particle).init(allocator),
         .random = prng.random(),
     };
     defer state.asteroids.deinit();
+    defer state.particles.deinit();
 
     const drawing = Drawing{
         .line_thickness = LINE_THICKNESS,
         .base_scale = CAMERA_SCALE,
     };
 
-    try resetStage();
+    try reset();
 
     // Main game loop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
-        update();
+        try update();
 
         // Draw
         //----------------------------------------------------------------------------------
@@ -68,20 +71,20 @@ pub fn main() !void {
 
         rl.clearBackground(rl.Color.black);
 
-        try render(&drawing);
+        render(&drawing);
         //----------------------------------------------------------------------------------
     }
 }
 
-fn resetStage() !void {
+fn reset() !void {
     state.ship = .{
         .position = SCREEN_SIZE.scale(0.5),
         .speed_turn = 1 * SCALE,
         .speed_forward = 24 * SCALE,
     };
 
-    // TODO: clear asteroid on player lose
     state.asteroids.clearRetainingCapacity();
+    state.particles.clearRetainingCapacity();
 
     const asteroids_count = 20;
     for (0..asteroids_count) |_| {
@@ -101,9 +104,11 @@ fn resetStage() !void {
     }
 }
 
-fn update() void {
+fn update() !void {
     const now = @as(f32, @floatCast(rl.getTime()));
     const delta: f32 = @floatCast(rl.getFrameTime());
+
+    // Ship Contorl
     if (rl.isKeyDown(.key_a)) {
         state.ship.turn(-1 * delta);
     }
@@ -118,64 +123,84 @@ fn update() void {
 
     state.ship.update(delta, SCREEN_SIZE);
 
+    // Asteroids
     for (state.asteroids.items) |*asteroid| {
         asteroid.update(SCREEN_SIZE);
 
-        // Collision /w ship
-        if (asteroid.position.distance(state.ship.position) < asteroid.size.hitbox()) {
+        // Collision /w ship not mid mega-burst
+        if (!state.ship.is_using_mega_fuel and asteroid.position.distance(state.ship.position) < asteroid.size.hitbox()) {
             if (!state.ship.isDead()) {
                 state.ship.death_timestamp = now;
+                try spawnDeathParticles();
             }
         }
     }
+
+    // Particles
+    {
+        var i: usize = 0;
+        while (i < state.particles.items.len) : (i += 1) {
+            var particle = &state.particles.items[i];
+            particle.update(delta, null);
+            if (particle.ttl <= 0) {
+                _ = state.particles.swapRemove(i);
+            }
+        }
+    }
+
+    // End Game / Death
+    if (state.ship.isDead() and (now - state.ship.death_timestamp) > 3.0) {
+        try reset();
+    }
 }
 
-fn render(drawing: *const Drawing) !void {
+fn render(drawing: *const Drawing) void {
     const now = @as(f32, @floatCast(rl.getTime()));
-    // DRAWING SHIP'S THRUST
-    if (rl.isKeyDown(.key_w)) {
-        const animation_speed = 25.0;
-        const sin_wave_anim = std.math.sin(now * animation_speed);
-        const boost_tail_anim = state.ship.velocity.length() * 0.05 + sin_wave_anim * 0.1;
-        const thrust_color = if (rl.isKeyDown(.key_b) and state.ship.mega_fuel > 0.0)
-            rl.Color.sky_blue
-        else
-            rl.Color.orange;
+    if (!state.ship.isDead()) {
+        // DRAWING SHIP'S THRUST
+        if (rl.isKeyDown(.key_w)) {
+            const animation_speed = 25.0;
+            const sin_wave_anim = std.math.sin(now * animation_speed);
+            const boost_tail_anim = state.ship.velocity.length() * 0.05 + sin_wave_anim * 0.1;
+            const thrust_color = if (state.ship.is_using_mega_fuel)
+                rl.Color.sky_blue
+            else
+                rl.Color.orange;
 
+            drawing.drawLines(
+                state.ship.position,
+                SHIP_SCALE, // TODO: move to ship data?
+                state.ship.rotation,
+                &.{
+                    Vector2.init(-0.25, -0.4),
+                    Vector2.init(0.0, -0.8 - boost_tail_anim),
+                    Vector2.init(0.25, -0.4),
+                },
+                thrust_color,
+            );
+        }
+
+        // DRAWING SHIP
         drawing.drawLines(
             state.ship.position,
             SHIP_SCALE, // TODO: move to ship data?
             state.ship.rotation,
             &.{
-                Vector2.init(-0.25, -0.4),
-                Vector2.init(0.0, -0.8 - boost_tail_anim),
-                Vector2.init(0.25, -0.4),
+                Vector2.init(0.0, 0.5),
+                Vector2.init(-0.4, -0.5),
+                Vector2.init(-0.3, -0.4),
+                Vector2.init(0.3, -0.4),
+                Vector2.init(0.4, -0.5),
             },
-            thrust_color,
+            if (state.ship.isDead() and DEBUG_VIZ) rl.Color.magenta else rl.Color.white,
         );
-    }
-
-    // DRAWING SHIP
-    drawing.drawLines(
-        state.ship.position,
-        SHIP_SCALE, // TODO: move to ship data?
-        state.ship.rotation,
-        &.{
-            Vector2.init(0.0, 0.5),
-            Vector2.init(-0.4, -0.5),
-            Vector2.init(-0.3, -0.4),
-            Vector2.init(0.3, -0.4),
-            Vector2.init(0.4, -0.5),
-        },
-        if (state.ship.isDead() and DEBUG_VIZ) rl.Color.magenta else rl.Color.white,
-    );
-    if (DEBUG_VIZ) {
-        rl.drawCircle(
-            @intFromFloat(state.ship.position.x),
-            @intFromFloat(state.ship.position.y),
-            SHIP_SCALE,
-            rl.Color.magenta,
-        );
+        if (DEBUG_VIZ) {
+            rl.drawCircleV(
+                state.ship.position,
+                SHIP_SCALE,
+                rl.Color.magenta,
+            );
+        }
     }
 
     // DRAWING ASTEROIDS
@@ -187,12 +212,44 @@ fn render(drawing: *const Drawing) !void {
             asteroid.seed,
         );
         if (DEBUG_VIZ) {
-            rl.drawCircleLines(
-                @intFromFloat(asteroid.position.x),
-                @intFromFloat(asteroid.position.y),
+            rl.drawCircleLinesV(
+                asteroid.position,
                 asteroid.size.hitbox(),
                 rl.Color.magenta,
             );
+        }
+    }
+
+    // PARTICLES
+    for (state.particles.items) |particle| {
+        const random_int = state.random.intRangeLessThan(usize, 0, 4);
+        const color: rl.Color = p_color: {
+            if (random_int == 1) break :p_color rl.Color.red;
+            if (random_int == 2) break :p_color rl.Color.orange;
+            if (random_int == 3) break :p_color rl.Color.yellow;
+            break :p_color rl.Color.white;
+        };
+
+        switch (particle.values) {
+            .line => |line| {
+                drawing.drawLines(
+                    particle.position,
+                    line.length,
+                    line.rotation,
+                    &.{
+                        Vector2.init(-0.5, 0),
+                        Vector2.init(0.5, 0),
+                    },
+                    color,
+                );
+            },
+            .dot => |dot| {
+                rl.drawCircleV(
+                    particle.position,
+                    dot.radius,
+                    color,
+                );
+            },
         }
     }
 
@@ -219,10 +276,6 @@ fn render(drawing: *const Drawing) !void {
             @intFromFloat(fuel_height),
             rl.Color.sky_blue,
         );
-    }
-
-    if (state.ship.isDead() and (now - state.ship.death_timestamp) > 3.0) {
-        try resetStage();
     }
 }
 
@@ -254,4 +307,32 @@ fn drawAsteroid(drawing: *const Drawing, pos: Vector2, size: Asteroid.Size, seed
         points.slice(),
         rl.Color.brown,
     );
+}
+
+fn spawnDeathParticles() !void {
+    const points_len = 100;
+    for (0..points_len) |_| {
+        const random_angle = std.math.tau * state.random.float(f32);
+        try state.particles.append(.{
+            .ttl = state.random.float(f32) * 3.0,
+            .position = state.ship.position,
+            .velocity = mathx.Vector2
+                .fromAngle(random_angle)
+                .scale(@floatFromInt(state.random.intRangeLessThan(usize, 5, 15))),
+            .values = p: {
+                if (state.random.boolean()) {
+                    break :p .{
+                        .line = .{
+                            .length = SCALE * (1 + 0.4 * state.random.float(f32)),
+                            .rotation = random_angle,
+                        },
+                    };
+                } else {
+                    break :p .{ .dot = .{
+                        .radius = state.random.float(f32) * 3.0,
+                    } };
+                }
+            },
+        });
+    }
 }

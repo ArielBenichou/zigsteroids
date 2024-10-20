@@ -5,7 +5,9 @@ const Vector2 = rl.Vector2;
 const Drawing = @import("drawing.zig").Drawing;
 const State = @import("state.zig").State;
 const Asteroid = @import("asteroid.zig").Asteroid;
-const Particle = @import("particle.zig").Particle;
+const particle = @import("particle.zig");
+const Particle = particle.Particle;
+const ParticleCommon = particle.ParticleCommon;
 const constants = @import("constants.zig");
 
 const SCREEN_SIZE = constants.SCREEN_SIZE;
@@ -140,10 +142,15 @@ fn update() !void {
     {
         var i: usize = 0;
         while (i < state.particles.items.len) : (i += 1) {
-            var particle = &state.particles.items[i];
-            particle.update(delta, null);
-            if (particle.ttl <= 0) {
-                _ = state.particles.swapRemove(i);
+            var p = &state.particles.items[i];
+            p.update(delta, null);
+            switch (p) {
+                .line, .dot => |*inner| {
+                    if (inner.common.ttl <= 0) {
+                        _ = state.particles.swapRemove(i);
+                    }
+                },
+                else => unreachable,
             }
         }
     }
@@ -221,7 +228,7 @@ fn render(drawing: *const Drawing) void {
     }
 
     // PARTICLES
-    for (state.particles.items) |particle| {
+    for (state.particles.items) |p| {
         const random_int = state.random.intRangeLessThan(usize, 0, 4);
         const color: rl.Color = p_color: {
             if (random_int == 1) break :p_color rl.Color.red;
@@ -230,10 +237,10 @@ fn render(drawing: *const Drawing) void {
             break :p_color rl.Color.white;
         };
 
-        switch (particle.values) {
+        switch (p.values) {
             .line => |line| {
                 drawing.drawLines(
-                    particle.position,
+                    line.common.position,
                     line.length,
                     line.rotation,
                     &.{
@@ -245,7 +252,7 @@ fn render(drawing: *const Drawing) void {
             },
             .dot => |dot| {
                 rl.drawCircleV(
-                    particle.position,
+                    dot.common.position,
                     dot.radius,
                     color,
                 );
@@ -313,26 +320,33 @@ fn spawnDeathParticles() !void {
     const points_len = 100;
     for (0..points_len) |_| {
         const random_angle = std.math.tau * state.random.float(f32);
-        try state.particles.append(.{
+        const common: ParticleCommon = .{
             .ttl = state.random.float(f32) * 3.0,
             .position = state.ship.position,
             .velocity = mathx.Vector2
                 .fromAngle(random_angle)
                 .scale(@floatFromInt(state.random.intRangeLessThan(usize, 5, 15))),
-            .values = p: {
-                if (state.random.boolean()) {
-                    break :p .{
-                        .line = .{
-                            .length = SCALE * (1 + 0.4 * state.random.float(f32)),
-                            .rotation = random_angle,
-                        },
-                    };
-                } else {
-                    break :p .{ .dot = .{
-                        .radius = state.random.float(f32) * 3.0,
-                    } };
-                }
+        };
+        try state.particles.append(.{
+            .line = .{
+                .common = common,
+                .length = SCALE * (1 + 0.4 * state.random.float(f32)),
+                .rotation = random_angle,
             },
+            // .values = p: {
+            //     if (state.random.boolean()) {
+            //         break :p .{
+            //             .line = .{
+            //                 .length = SCALE * (1 + 0.4 * state.random.float(f32)),
+            //                 .rotation = random_angle,
+            //             },
+            //         };
+            //     } else {
+            //         break :p .{ .dot = .{
+            //             .radius = state.random.float(f32) * 3.0,
+            //         } };
+            //     }
+            // },
         });
     }
 }

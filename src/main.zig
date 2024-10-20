@@ -6,6 +6,7 @@ const Drawing = @import("drawing.zig").Drawing;
 const State = @import("state.zig").State;
 const Asteroid = @import("asteroid.zig").Asteroid;
 const Particle = @import("particle.zig").Particle;
+const Projectile = @import("projectile.zig").Projectile;
 const constants = @import("constants.zig");
 
 const SCREEN_SIZE = constants.SCREEN_SIZE;
@@ -48,17 +49,19 @@ pub fn main() !void {
         .ship = undefined,
         .asteroids = std.ArrayList(Asteroid).init(allocator),
         .particles = std.ArrayList(Particle).init(allocator),
+        .projectile = std.ArrayList(Projectile).init(allocator),
         .random = prng.random(),
     };
     defer state.asteroids.deinit();
     defer state.particles.deinit();
+    defer state.projectile.deinit();
 
     const drawing = Drawing{
         .line_thickness = LINE_THICKNESS,
         .base_scale = CAMERA_SCALE,
     };
 
-    try reset();
+    try init();
 
     // Main game loop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
@@ -75,17 +78,10 @@ pub fn main() !void {
         //----------------------------------------------------------------------------------
     }
 }
-
-fn reset() !void {
-    state.ship = .{
-        .position = SCREEN_SIZE.scale(0.5),
-        .speed_turn = 1 * SCALE,
-        .speed_forward = 24 * SCALE,
-    };
+fn init() !void {
+    try reset();
 
     state.asteroids.clearRetainingCapacity();
-    state.particles.clearRetainingCapacity();
-
     const asteroids_count = 20;
     for (0..asteroids_count) |_| {
         const random_angle = std.math.tau * state.random.float(f32);
@@ -104,24 +100,49 @@ fn reset() !void {
     }
 }
 
+fn reset() !void {
+    state.ship = .{
+        .position = SCREEN_SIZE.scale(0.5),
+        .speed_turn = 1 * SCALE,
+        .speed_forward = 24 * SCALE,
+    };
+
+    state.particles.clearRetainingCapacity();
+}
+
 fn update() !void {
     const now = @as(f32, @floatCast(rl.getTime()));
     const delta: f32 = @floatCast(rl.getFrameTime());
 
-    // Ship Contorl
-    if (rl.isKeyDown(.key_a)) {
-        state.ship.turn(-1 * delta);
-    }
+    if (!state.ship.isDead()) {
+        // Ship Contorl
+        if (rl.isKeyDown(.key_a)) {
+            state.ship.turn(-1 * delta);
+        }
 
-    if (rl.isKeyDown(.key_d)) {
-        state.ship.turn(delta);
-    }
+        if (rl.isKeyDown(.key_d)) {
+            state.ship.turn(delta);
+        }
 
-    if (rl.isKeyDown(.key_w)) {
-        state.ship.addThrust(delta, rl.isKeyDown(.key_b));
-    }
+        if (rl.isKeyDown(.key_w)) {
+            state.ship.addThrust(delta, rl.isKeyDown(.key_b));
+        }
 
-    state.ship.update(delta, SCREEN_SIZE);
+        // Shoot
+        if (rl.isKeyPressed(.key_space)) {
+            try state.projectile.append(.{
+                .position = state.ship.position,
+                .length = 2.5,
+                .ttl = 1,
+                .rotation = state.ship.rotation,
+                .velocity = state.ship
+                    .getShipDirection()
+                    .scale(24 * SCALE),
+            });
+        }
+
+        state.ship.update(delta, SCREEN_SIZE);
+    }
 
     // Asteroids
     for (state.asteroids.items) |*asteroid| {
@@ -144,6 +165,18 @@ fn update() !void {
             particle.update(delta, null);
             if (particle.ttl <= 0) {
                 _ = state.particles.swapRemove(i);
+            }
+        }
+    }
+
+    // Projectiles
+    {
+        var i: usize = 0;
+        while (i < state.projectile.items.len) : (i += 1) {
+            var projectile = &state.projectile.items[i];
+            projectile.update(delta, null);
+            if (projectile.ttl <= 0) {
+                _ = state.projectile.swapRemove(i);
             }
         }
     }
@@ -220,7 +253,7 @@ fn render(drawing: *const Drawing) void {
         }
     }
 
-    // PARTICLES
+    // DRAWING PARTICLES
     for (state.particles.items) |particle| {
         const random_int = state.random.intRangeLessThan(usize, 0, 4);
         const color: rl.Color = p_color: {
@@ -251,6 +284,20 @@ fn render(drawing: *const Drawing) void {
                 );
             },
         }
+    }
+
+    // DRAWING PORJECTILES
+    for (state.projectile.items) |*projetile| {
+        drawing.drawLines(
+            projetile.position,
+            projetile.length,
+            projetile.rotation,
+            &.{
+                Vector2.init(0, -0.5),
+                Vector2.init(0, 0.5),
+            },
+            rl.Color.red,
+        );
     }
 
     // DRAWING FUEL BAR
@@ -320,18 +367,20 @@ fn spawnDeathParticles() !void {
                 .fromAngle(random_angle)
                 .scale(@floatFromInt(state.random.intRangeLessThan(usize, 5, 15))),
             .values = p: {
-                if (state.random.boolean()) {
-                    break :p .{
+                const random_particle_type = state.random.enumValue(std.meta.Tag(std.meta.FieldType(Particle, .values)));
+                break :p switch (random_particle_type) {
+                    .line => .{
                         .line = .{
                             .length = SCALE * (1 + 0.4 * state.random.float(f32)),
                             .rotation = random_angle,
                         },
-                    };
-                } else {
-                    break :p .{ .dot = .{
-                        .radius = state.random.float(f32) * 3.0,
-                    } };
-                }
+                    },
+                    .dot => .{
+                        .dot = .{
+                            .radius = state.random.float(f32) * 3.0,
+                        },
+                    },
+                };
             },
         });
     }

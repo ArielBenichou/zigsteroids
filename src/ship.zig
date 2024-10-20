@@ -6,7 +6,7 @@ pub const Ship = struct {
     death_timestamp: f32 = 0.0,
     velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
     position: rl.Vector2 = .{ .x = 0, .y = 0 },
-    rotation: f32 = 0,
+    rotation: f32 = std.math.tau * 0.5,
     mega_fuel: f32 = 1,
     is_using_mega_fuel: bool = false,
 

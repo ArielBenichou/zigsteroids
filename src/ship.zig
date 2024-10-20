@@ -1,8 +1,9 @@
 const std = @import("std");
-const math = std.math;
+const mathx = @import("mathx.zig");
 const rl = @import("raylib");
 
 pub const Ship = struct {
+    death_timestamp: f32 = 0.0,
     velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
     position: rl.Vector2 = .{ .x = 0, .y = 0 },
     rotation: f32 = 0,
@@ -12,8 +13,12 @@ pub const Ship = struct {
     speed_turn: f32 = 1,
     speed_forward: f32 = 24,
 
+    pub fn isDead(self: *Ship) bool {
+        return self.death_timestamp != 0.0;
+    }
+
     pub fn turn(self: *Ship, delta: f32) void {
-        self.rotation += math.tau * self.speed_turn * delta;
+        self.rotation += std.math.tau * self.speed_turn * delta;
     }
 
     /// change the ship velocity
@@ -38,14 +43,10 @@ pub const Ship = struct {
         }
 
         // regenerate mega_fuel
-        self.mega_fuel += delta * 0.1;
+        self.mega_fuel = std.math.clamp(self.mega_fuel + delta * 0.1, 0, 1);
     }
 
     pub fn getShipDirection(self: *Ship) rl.Vector2 {
-        const angle = self.rotation + math.pi * 0.5;
-        return rl.Vector2.init(
-            math.cos(angle),
-            math.sin(angle),
-        );
+        return mathx.Vector2.fromAngle(self.rotation + std.math.pi * 0.5);
     }
 };

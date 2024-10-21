@@ -35,6 +35,14 @@ pub const Asteroid = struct {
             };
         }
 
+        pub fn getSmaller(self: Size) ?Size {
+            return switch (self) {
+                .big => .medium,
+                .medium => .small,
+                .small => null,
+            };
+        }
+
         pub fn hitbox(self: Size) f32 {
             return switch (self) {
                 .big => self.size() * CAMERA_SCALE * 0.4,

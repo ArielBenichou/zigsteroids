@@ -46,8 +46,10 @@ pub const Ship = struct {
 
     pub fn shoot(self: *Ship) bool {
         const can_shoot = self.canShoot();
-        if (can_shoot)
+        if (can_shoot) {
             self.mega_fuel -= PEW_PEW_COST;
+            self.velocity = self.velocity.add(self.getShipDirection().scale(-0.5));
+        }
         return can_shoot;
     }
 

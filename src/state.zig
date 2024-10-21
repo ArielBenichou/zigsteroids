@@ -8,6 +8,7 @@ const Projectile = @import("projectile.zig").Projectile;
 pub const State = struct {
     ship: Ship,
     asteroids: std.ArrayList(Asteroid),
+    asteroids_queue: std.ArrayList(Asteroid),
     particles: std.ArrayList(Particle),
     projectile: std.ArrayList(Projectile),
     random: std.Random,

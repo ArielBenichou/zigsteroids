@@ -48,11 +48,13 @@ pub fn main() !void {
     state = .{
         .ship = undefined,
         .asteroids = std.ArrayList(Asteroid).init(allocator),
+        .asteroids_queue = std.ArrayList(Asteroid).init(allocator),
         .particles = std.ArrayList(Particle).init(allocator),
         .projectile = std.ArrayList(Projectile).init(allocator),
         .random = prng.random(),
     };
     defer state.asteroids.deinit();
+    defer state.asteroids_queue.deinit();
     defer state.particles.deinit();
     defer state.projectile.deinit();
 
@@ -82,11 +84,12 @@ fn init() !void {
     try reset();
 
     state.asteroids.clearRetainingCapacity();
+    state.asteroids_queue.clearRetainingCapacity();
     const asteroids_count = 20;
     for (0..asteroids_count) |_| {
         const random_angle = std.math.tau * state.random.float(f32);
         const size = state.random.enumValue(Asteroid.Size);
-        try state.asteroids.append(.{
+        try state.asteroids_queue.append(.{
             .position = Vector2.init(
                 state.random.float(f32) * SCREEN_SIZE.x,
                 state.random.float(f32) * SCREEN_SIZE.y,
@@ -146,6 +149,12 @@ fn update() !void {
         state.ship.update(delta, SCREEN_SIZE);
     }
 
+    // add asteroids from queue
+    for (state.asteroids_queue.items) |asteroid| {
+        try state.asteroids.append(asteroid);
+    }
+    state.asteroids_queue.clearRetainingCapacity();
+
     // Projectiles
     {
         var i: usize = 0;
@@ -157,11 +166,8 @@ fn update() !void {
             for (state.asteroids.items) |*asteroid| {
                 if (asteroid.position.distance(projectile.position) < asteroid.size.hitbox()) {
                     if (!asteroid.remove) {
-                        // BANG!
-                        asteroid.remove = true;
+                        try hitAsteroid(asteroid, projectile.velocity);
                         projectile.ttl = 0;
-                        state.ship.refill();
-                        try spawnExplosionParticles(asteroid.position, rl.Color.brown);
                     }
                 }
             }
@@ -204,10 +210,7 @@ fn update() !void {
                 if (state.ship.is_using_mega_fuel) {
                     // Mid Burst Kill
                     if (!asteroid.remove) {
-                        // BANG!
-                        asteroid.remove = true;
-                        state.ship.refill();
-                        try spawnExplosionParticles(asteroid.position, rl.Color.brown);
+                        try hitAsteroid(asteroid, state.ship.velocity);
                     }
                 } else if (!state.ship.isDead()) {
                     state.ship.death_timestamp = now;
@@ -386,6 +389,27 @@ fn drawAsteroid(drawing: *const Drawing, pos: Vector2, size: Asteroid.Size, seed
         points.slice(),
         rl.Color.brown,
     );
+}
+
+fn hitAsteroid(asteroid: *Asteroid, impact_maybe: ?Vector2) !void {
+    asteroid.remove = true;
+    state.ship.refill();
+    try spawnExplosionParticles(asteroid.position, rl.Color.brown);
+
+    if (asteroid.size == .small) return;
+
+    for (0..2) |_| {
+        const dir = asteroid.velocity.normalize();
+        const size = asteroid.size.getSmaller() orelse unreachable;
+        try state.asteroids_queue.append(.{
+            .position = asteroid.position,
+            .velocity = dir
+                .scale(size.velocityScale() * 3.0 * state.random.float(f32))
+                .add(if (impact_maybe) |impact| impact.normalize().scale(1.5) else Vector2.zero()),
+            .size = size,
+            .seed = state.random.int(u64),
+        });
+    }
 }
 
 fn spawnExplosionParticles(origin: Vector2, color: ?rl.Color) !void {

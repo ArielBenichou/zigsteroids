@@ -130,15 +130,17 @@ fn update() !void {
 
         // Shoot
         if (rl.isKeyPressed(.key_space)) {
-            try state.projectile.append(.{
-                .position = state.ship.position,
-                .length = 2.5,
-                .ttl = 1,
-                .rotation = state.ship.rotation,
-                .velocity = state.ship
-                    .getShipDirection()
-                    .scale(24 * SCALE),
-            });
+            if (state.ship.shoot()) {
+                try state.projectile.append(.{
+                    .position = state.ship.position,
+                    .length = 2.5,
+                    .ttl = 1,
+                    .rotation = state.ship.rotation,
+                    .velocity = state.ship
+                        .getShipDirection()
+                        .scale(24 * SCALE),
+                });
+            }
         }
 
         state.ship.update(delta, SCREEN_SIZE);
@@ -149,16 +151,25 @@ fn update() !void {
         var i: usize = 0;
         while (i < state.projectile.items.len) : (i += 1) {
             var projectile = &state.projectile.items[i];
-            projectile.update(delta, null);
+            projectile.update(delta, SCREEN_SIZE);
 
             // Collision /w asteroids
             for (state.asteroids.items) |*asteroid| {
                 if (asteroid.position.distance(projectile.position) < asteroid.size.hitbox()) {
                     if (!asteroid.remove) {
+                        // BANG!
                         asteroid.remove = true;
                         projectile.ttl = 0;
+                        state.ship.refill();
                         try spawnExplosionParticles(asteroid.position, rl.Color.brown);
                     }
+                }
+            }
+            // Lazer - Collision ship not mid mega-burst
+            if (!state.ship.is_using_mega_fuel and projectile.position.distance(state.ship.position) < state.ship.hitbox()) {
+                if (!state.ship.isDead()) {
+                    state.ship.death_timestamp = now;
+                    try spawnExplosionParticles(state.ship.position, null);
                 }
             }
 
@@ -188,9 +199,17 @@ fn update() !void {
             const asteroid = &state.asteroids.items[i];
             asteroid.update(SCREEN_SIZE);
 
-            // Collision /w ship not mid mega-burst
-            if (!state.ship.is_using_mega_fuel and asteroid.position.distance(state.ship.position) < asteroid.size.hitbox()) {
-                if (!state.ship.isDead()) {
+            // Asteroids - Collision
+            if (asteroid.position.distance(state.ship.position) < asteroid.size.hitbox() + state.ship.hitbox()) {
+                if (state.ship.is_using_mega_fuel) {
+                    // Mid Burst Kill
+                    if (!asteroid.remove) {
+                        // BANG!
+                        asteroid.remove = true;
+                        state.ship.refill();
+                        try spawnExplosionParticles(asteroid.position, rl.Color.brown);
+                    }
+                } else if (!state.ship.isDead()) {
                     state.ship.death_timestamp = now;
                     try spawnExplosionParticles(state.ship.position, null);
                 }
@@ -249,9 +268,9 @@ fn render(drawing: *const Drawing) void {
             if (state.ship.isDead() and DEBUG_VIZ) rl.Color.magenta else rl.Color.white,
         );
         if (DEBUG_VIZ) {
-            rl.drawCircleV(
+            rl.drawCircleLinesV(
                 state.ship.position,
-                SHIP_SCALE,
+                state.ship.hitbox(),
                 rl.Color.magenta,
             );
         }
@@ -334,7 +353,7 @@ fn render(drawing: *const Drawing) void {
             @intFromFloat(SCREEN_SIZE.y - margin - padding - fuel_height),
             width - padding * 2,
             @intFromFloat(fuel_height),
-            rl.Color.sky_blue,
+            if (state.ship.canShoot()) rl.Color.sky_blue else rl.Color.dark_blue,
         );
     }
 }

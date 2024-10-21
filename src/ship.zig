@@ -1,7 +1,10 @@
 const std = @import("std");
 const mathx = @import("mathx.zig");
 const rl = @import("raylib");
+const SHIP_SCALE = @import("constants.zig").SHIP_SCALE;
+const CAMERA_SCALE = @import("constants.zig").CAMERA_SCALE;
 
+const PEW_PEW_COST = 0.25;
 pub const Ship = struct {
     death_timestamp: f32 = 0.0,
     velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
@@ -13,6 +16,11 @@ pub const Ship = struct {
     drag: f32 = 0.03, // less drag is more chanllenging to manuver
     speed_turn: f32 = 1,
     speed_forward: f32 = 24,
+
+    pub fn hitbox(self: *Ship) f32 {
+        _ = self; // autofix
+        return SHIP_SCALE * CAMERA_SCALE * 0.5;
+    }
 
     pub fn isDead(self: *Ship) bool {
         return self.death_timestamp != 0.0;
@@ -30,6 +38,21 @@ pub const Ship = struct {
         self.velocity = self.velocity.add(
             self.getShipDirection().scale((self.speed_forward * (mega_fuel_mod + 1.0)) * delta),
         );
+    }
+
+    pub fn canShoot(self: *Ship) bool {
+        return self.mega_fuel >= PEW_PEW_COST;
+    }
+
+    pub fn shoot(self: *Ship) bool {
+        const can_shoot = self.canShoot();
+        if (can_shoot)
+            self.mega_fuel -= PEW_PEW_COST;
+        return can_shoot;
+    }
+
+    pub fn refill(self: *Ship) void {
+        self.mega_fuel = std.math.clamp(self.mega_fuel + PEW_PEW_COST / 2.0, 0, 1);
     }
 
     pub fn update(self: *Ship, delta: f32, dim: ?rl.Vector2) void {

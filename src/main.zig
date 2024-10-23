@@ -52,6 +52,8 @@ pub fn main() !void {
         .particles = std.ArrayList(Particle).init(allocator),
         .projectile = std.ArrayList(Projectile).init(allocator),
         .random = prng.random(),
+        .lives = undefined,
+        .score = undefined,
     };
     defer state.asteroids.deinit();
     defer state.asteroids_queue.deinit();
@@ -63,6 +65,7 @@ pub fn main() !void {
         .base_scale = CAMERA_SCALE,
     };
 
+    try reset();
     try init();
 
     // Main game loop
@@ -80,9 +83,10 @@ pub fn main() !void {
         //----------------------------------------------------------------------------------
     }
 }
-fn init() !void {
-    try reset();
 
+fn init() !void {
+    state.lives = 3;
+    state.score = 0;
     state.asteroids.clearRetainingCapacity();
     state.asteroids_queue.clearRetainingCapacity();
     const asteroids_count = 20;
@@ -104,6 +108,12 @@ fn init() !void {
 }
 
 fn reset() !void {
+    if (state.ship.isDead()) {
+        state.lives -= 1;
+        if (state.lives <= 0) {
+            try init();
+        }
+    }
     state.ship = .{
         .position = SCREEN_SIZE.scale(0.5),
         .speed_turn = 1 * SCALE,
@@ -117,6 +127,10 @@ fn update() !void {
     const now = @as(f32, @floatCast(rl.getTime()));
     const delta: f32 = @floatCast(rl.getFrameTime());
 
+    if (rl.isKeyDown(.key_left_control) and rl.isKeyDown(.key_r)) {
+        try init();
+    }
+
     if (!state.ship.isDead()) {
         // Ship Contorl
         if (rl.isKeyDown(.key_a)) {
@@ -128,7 +142,7 @@ fn update() !void {
         }
 
         if (rl.isKeyDown(.key_w)) {
-            state.ship.addThrust(delta, rl.isKeyDown(.key_b));
+            state.ship.addThrust(delta, rl.isKeyDown(.key_left_shift));
         }
 
         // Shoot

@@ -17,6 +17,14 @@ pub const Ship = struct {
     speed_turn: f32 = 1,
     speed_forward: f32 = 24,
 
+    pub const drawing = [_]rl.Vector2{
+        rl.Vector2.init(0.0, 0.5),
+        rl.Vector2.init(-0.4, -0.5),
+        rl.Vector2.init(-0.3, -0.4),
+        rl.Vector2.init(0.3, -0.4),
+        rl.Vector2.init(0.4, -0.5),
+    };
+
     pub fn hitbox(self: *Ship) f32 {
         _ = self; // autofix
         return SHIP_SCALE * CAMERA_SCALE * 0.5;

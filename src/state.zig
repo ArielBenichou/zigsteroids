@@ -12,6 +12,6 @@ pub const State = struct {
     particles: std.ArrayList(Particle),
     projectile: std.ArrayList(Projectile),
     random: std.Random,
-    lives: i32,
-    score: i32,
+    lives: usize,
+    score: usize,
 };

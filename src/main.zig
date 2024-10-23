@@ -5,6 +5,7 @@ const Vector2 = rl.Vector2;
 const Drawing = @import("drawing.zig").Drawing;
 const State = @import("state.zig").State;
 const Asteroid = @import("asteroid.zig").Asteroid;
+const Ship = @import("ship.zig").Ship;
 const Particle = @import("particle.zig").Particle;
 const Projectile = @import("projectile.zig").Projectile;
 const constants = @import("constants.zig");
@@ -65,7 +66,6 @@ pub fn main() !void {
         .base_scale = CAMERA_SCALE,
     };
 
-    try reset();
     try init();
 
     // Main game loop
@@ -85,7 +85,8 @@ pub fn main() !void {
 }
 
 fn init() !void {
-    state.lives = 3;
+    try reset();
+    state.lives = 4;
     state.score = 0;
     state.asteroids.clearRetainingCapacity();
     state.asteroids_queue.clearRetainingCapacity();
@@ -108,12 +109,6 @@ fn init() !void {
 }
 
 fn reset() !void {
-    if (state.ship.isDead()) {
-        state.lives -= 1;
-        if (state.lives <= 0) {
-            try init();
-        }
-    }
     state.ship = .{
         .position = SCREEN_SIZE.scale(0.5),
         .speed_turn = 1 * SCALE,
@@ -124,7 +119,7 @@ fn reset() !void {
 }
 
 fn update() !void {
-    const now = @as(f32, @floatCast(rl.getTime()));
+    const now: f32 = @floatCast(rl.getTime());
     const delta: f32 = @floatCast(rl.getFrameTime());
 
     if (rl.isKeyDown(.key_left_control) and rl.isKeyDown(.key_r)) {
@@ -228,6 +223,7 @@ fn update() !void {
                     }
                 } else if (!state.ship.isDead()) {
                     state.ship.death_timestamp = now;
+                    state.lives -= 1;
                     try spawnExplosionParticles(state.ship.position, null);
                 }
             }
@@ -239,13 +235,34 @@ fn update() !void {
     }
 
     // End Game / Death
-    if (state.ship.isDead() and (now - state.ship.death_timestamp) > 3.0) {
-        try reset();
+    const respawn_time = 3.0;
+    if (state.ship.isDead() and (now - state.ship.death_timestamp) > respawn_time) {
+        if (state.lives <= 0) {
+            try init();
+        } else {
+            try reset();
+        }
     }
 }
 
 fn render(drawing: *const Drawing) void {
     const now = @as(f32, @floatCast(rl.getTime()));
+
+    // DRAW LIVES UI
+    // HACK: we want to show only the number of lives remaining, so we do the -1
+    if (state.lives >= 2) {
+        for (0..state.lives - 1) |i| {
+            const size = SHIP_SCALE / 1.5;
+            drawing.drawLines(
+                Vector2.init(@as(f32, @floatFromInt(i + 1)) * size * 20, 20),
+                size,
+                std.math.pi,
+                &Ship.drawing,
+                rl.Color.light_gray,
+            );
+        }
+    }
+
     if (!state.ship.isDead()) {
         // DRAWING SHIP'S THRUST
         if (rl.isKeyDown(.key_w)) {
@@ -275,13 +292,7 @@ fn render(drawing: *const Drawing) void {
             state.ship.position,
             SHIP_SCALE, // TODO: move to ship data?
             state.ship.rotation,
-            &.{
-                Vector2.init(0.0, 0.5),
-                Vector2.init(-0.4, -0.5),
-                Vector2.init(-0.3, -0.4),
-                Vector2.init(0.3, -0.4),
-                Vector2.init(0.4, -0.5),
-            },
+            &Ship.drawing,
             if (state.ship.isDead() and DEBUG_VIZ) rl.Color.magenta else rl.Color.white,
         );
         if (DEBUG_VIZ) {

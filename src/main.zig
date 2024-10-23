@@ -110,6 +110,7 @@ fn init() !void {
 
 fn reset() !void {
     state.ship = .{
+        .invulnerable = 1.5,
         .position = SCREEN_SIZE.scale(0.5),
         .speed_turn = 1 * SCALE,
         .speed_forward = 24 * SCALE,
@@ -141,16 +142,16 @@ fn update() !void {
         }
 
         // Shoot
-        if (rl.isKeyPressed(.key_space)) {
+        if (!state.ship.isInvulnerable() and rl.isKeyPressed(.key_space)) {
             if (state.ship.shoot()) {
                 try state.projectile.append(.{
-                    .position = state.ship.position,
+                    .position = state.ship.position.add(Ship.drawing[0]),
                     .length = 2.5,
                     .ttl = 1,
                     .rotation = state.ship.rotation,
                     .velocity = state.ship
                         .getShipDirection()
-                        .scale(24 * SCALE),
+                        .scale(30 * SCALE),
                 });
             }
         }
@@ -215,17 +216,17 @@ fn update() !void {
             asteroid.update(SCREEN_SIZE);
 
             // Asteroids - Collision
-            if (asteroid.position.distance(state.ship.position) < asteroid.size.hitbox() + state.ship.hitbox()) {
-                if (state.ship.is_using_mega_fuel) {
-                    // Mid Burst Kill
-                    if (!asteroid.remove) {
-                        try hitAsteroid(asteroid, state.ship.velocity);
-                    }
-                } else if (!state.ship.isDead()) {
-                    state.ship.death_timestamp = now;
-                    state.lives -= 1;
-                    try spawnExplosionParticles(state.ship.position, null);
+            if (!state.ship.isDead() and
+                !state.ship.isInvulnerable() and
+                !state.ship.is_using_mega_fuel and
+                asteroid.position.distance(state.ship.position) < asteroid.size.hitbox() + state.ship.hitbox())
+            {
+                if (!asteroid.remove) {
+                    try hitAsteroid(asteroid, state.ship.velocity);
                 }
+                state.ship.death_timestamp = now;
+                state.lives -= 1;
+                try spawnExplosionParticles(state.ship.position, null);
             }
 
             if (asteroid.remove) {
@@ -293,7 +294,7 @@ fn render(drawing: *const Drawing) void {
             SHIP_SCALE, // TODO: move to ship data?
             state.ship.rotation,
             &Ship.drawing,
-            if (state.ship.isDead() and DEBUG_VIZ) rl.Color.magenta else rl.Color.white,
+            if (state.ship.isInvulnerable() and @mod(rl.getTime(), 0.25) >= 0.125) rl.Color.gray else rl.Color.white,
         );
         if (DEBUG_VIZ) {
             rl.drawCircleLinesV(

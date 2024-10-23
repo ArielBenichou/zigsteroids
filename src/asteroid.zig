@@ -53,9 +53,9 @@ pub const Asteroid = struct {
 
         pub fn velocityScale(self: Size) f32 {
             return switch (self) {
-                .big => 0.75,
-                .medium => 1.0,
-                .small => 1.6,
+                .big => 1,
+                .medium => 1.5,
+                .small => 2,
             };
         }
     };

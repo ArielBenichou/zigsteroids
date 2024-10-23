@@ -4,9 +4,10 @@ const rl = @import("raylib");
 const SHIP_SCALE = @import("constants.zig").SHIP_SCALE;
 const CAMERA_SCALE = @import("constants.zig").CAMERA_SCALE;
 
-const PEW_PEW_COST = 0.25;
+const PEW_PEW_COST = 0.2;
 pub const Ship = struct {
     death_timestamp: f32 = 0.0,
+    invulnerable: f32 = 0.0,
     velocity: rl.Vector2 = .{ .x = 0, .y = 0 },
     position: rl.Vector2 = .{ .x = 0, .y = 0 },
     rotation: f32 = std.math.tau * 0.5,
@@ -32,6 +33,10 @@ pub const Ship = struct {
 
     pub fn isDead(self: *Ship) bool {
         return self.death_timestamp != 0.0;
+    }
+
+    pub fn isInvulnerable(self: *Ship) bool {
+        return self.invulnerable > 0.0;
     }
 
     pub fn turn(self: *Ship, delta: f32) void {
@@ -62,7 +67,7 @@ pub const Ship = struct {
     }
 
     pub fn refill(self: *Ship) void {
-        self.mega_fuel = std.math.clamp(self.mega_fuel + PEW_PEW_COST / 2.0, 0, 1);
+        self.mega_fuel = std.math.clamp(self.mega_fuel + PEW_PEW_COST, 0, 1);
     }
 
     pub fn update(self: *Ship, delta: f32, dim: ?rl.Vector2) void {
@@ -79,6 +84,10 @@ pub const Ship = struct {
 
         // regenerate mega_fuel
         self.mega_fuel = std.math.clamp(self.mega_fuel + delta * 0.1, 0, 1);
+
+        if (self.isInvulnerable()) {
+            self.invulnerable -= delta;
+        }
     }
 
     pub fn getShipDirection(self: *Ship) rl.Vector2 {

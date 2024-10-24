@@ -79,7 +79,7 @@ pub fn main() !void {
 
         rl.clearBackground(rl.Color.black);
 
-        render(&drawing);
+        try render(&drawing);
         //----------------------------------------------------------------------------------
     }
 }
@@ -246,7 +246,7 @@ fn update() !void {
     }
 }
 
-fn render(drawing: *const Drawing) void {
+fn render(drawing: *const Drawing) !void {
     const now = @as(f32, @floatCast(rl.getTime()));
 
     // DRAW LIVES UI
@@ -260,9 +260,13 @@ fn render(drawing: *const Drawing) void {
                 std.math.pi,
                 &Ship.drawing,
                 rl.Color.light_gray,
+                true,
             );
         }
     }
+
+    // DRAWING SCORE
+    try drawing.drawNumber(state.score, Vector2.init(SCREEN_SIZE.x - 20, 20));
 
     if (!state.ship.isDead()) {
         // DRAWING SHIP'S THRUST
@@ -285,6 +289,7 @@ fn render(drawing: *const Drawing) void {
                     Vector2.init(0.25, -0.4),
                 },
                 thrust_color,
+                true,
             );
         }
 
@@ -295,6 +300,7 @@ fn render(drawing: *const Drawing) void {
             state.ship.rotation,
             &Ship.drawing,
             if (state.ship.isInvulnerable() and @mod(rl.getTime(), 0.25) >= 0.125) rl.Color.gray else rl.Color.white,
+            true,
         );
         if (DEBUG_VIZ) {
             rl.drawCircleLinesV(
@@ -335,6 +341,7 @@ fn render(drawing: *const Drawing) void {
                         Vector2.init(0.5, 0),
                     },
                     particle.color,
+                    true,
                 );
             },
             .dot => |dot| {
@@ -358,6 +365,7 @@ fn render(drawing: *const Drawing) void {
                 Vector2.init(0, 0.5),
             },
             rl.Color.red,
+            true,
         );
     }
 
@@ -414,12 +422,14 @@ fn drawAsteroid(drawing: *const Drawing, pos: Vector2, size: Asteroid.Size, seed
         0.0,
         points.slice(),
         rl.Color.brown,
+        true,
     );
 }
 
 fn hitAsteroid(asteroid: *Asteroid, impact_maybe: ?Vector2) !void {
     asteroid.remove = true;
     state.ship.refill();
+    state.score += 10;
     try spawnExplosionParticles(asteroid.position, rl.Color.brown);
 
     if (asteroid.size == .small) return;

@@ -13,5 +13,5 @@ pub const State = struct {
     projectile: std.ArrayList(Projectile),
     random: std.Random,
     lives: usize,
-    score: usize,
+    score: usize = 0,
 };

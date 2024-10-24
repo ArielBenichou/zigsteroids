@@ -22,6 +22,14 @@ pub const Asteroid = struct {
         }
     }
 
+    pub fn score(self: *Asteroid) usize {
+        return switch (self.size) {
+            .big => 20,
+            .medium => 50,
+            .small => 100,
+        };
+    }
+
     pub const Size = enum {
         big,
         medium,
@@ -53,9 +61,9 @@ pub const Asteroid = struct {
 
         pub fn velocityScale(self: Size) f32 {
             return switch (self) {
-                .big => 1,
-                .medium => 1.5,
-                .small => 2,
+                .big => 0.75,
+                .medium => 1.8,
+                .small => 3,
             };
         }
     };

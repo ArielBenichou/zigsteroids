@@ -4,6 +4,7 @@ const rl = @import("raylib");
 const Vector2 = rl.Vector2;
 const Drawing = @import("drawing.zig").Drawing;
 const State = @import("state.zig").State;
+const Sound = @import("sound.zig").Sound;
 const Asteroid = @import("asteroid.zig").Asteroid;
 const Ship = @import("ship.zig").Ship;
 const Particle = @import("particle.zig").Particle;
@@ -18,6 +19,7 @@ const SHIP_SCALE = constants.SHIP_SCALE;
 var DEBUG_VIZ = false;
 
 var state: State = undefined;
+var sound: Sound = undefined;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -40,6 +42,9 @@ pub fn main() !void {
     defer rl.closeWindow(); // Close window and OpenGL context
 
     rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
+
+    rl.initAudioDevice();
+    defer rl.closeAudioDevice();
     //--------------------------------------------------------------------------------------
 
     const seed: u64 = @bitCast(std.time.timestamp());
@@ -55,11 +60,36 @@ pub fn main() !void {
         .random = prng.random(),
         .lives = undefined,
         .score = undefined,
+        .level_start = undefined,
     };
     defer state.asteroids.deinit();
     defer state.asteroids_queue.deinit();
     defer state.particles.deinit();
     defer state.projectile.deinit();
+
+    const pew_path = try getRelativePath(allocator, "./assets/sounds/pew.wav");
+    const boom_path = try getRelativePath(allocator, "./assets/sounds/boom.wav");
+    const loser_path = try getRelativePath(allocator, "./assets/sounds/loser.wav");
+    const thrust_path = try getRelativePath(allocator, "./assets/sounds/thrust.wav");
+    const mega_thrust_path = try getRelativePath(allocator, "./assets/sounds/mega_thrust.wav");
+    sound = .{
+        .pew = rl.loadSound(pew_path),
+        .boom = rl.loadSound(boom_path),
+        .loser = rl.loadSound(loser_path),
+        .thrust = rl.loadSound(thrust_path),
+        .mega_thrust = rl.loadSound(mega_thrust_path),
+    };
+    allocator.free(pew_path);
+    allocator.free(boom_path);
+    allocator.free(loser_path);
+    allocator.free(thrust_path);
+    allocator.free(mega_thrust_path);
+
+    defer rl.unloadSound(sound.pew);
+    defer rl.unloadSound(sound.boom);
+    defer rl.unloadSound(sound.loser);
+    defer rl.unloadSound(sound.thrust);
+    defer rl.unloadSound(sound.mega_thrust);
 
     const drawing = Drawing{
         .line_thickness = LINE_THICKNESS,
@@ -80,6 +110,7 @@ pub fn main() !void {
         rl.clearBackground(rl.Color.black);
 
         try render(&drawing);
+        state.frame += 1;
         //----------------------------------------------------------------------------------
     }
 }
@@ -88,6 +119,7 @@ fn init() !void {
     try reset();
     state.lives = 4;
     state.score = 0;
+    state.level_start = @floatCast(rl.getTime());
     state.asteroids.clearRetainingCapacity();
     state.asteroids_queue.clearRetainingCapacity();
     const asteroids_count = 20;
@@ -138,12 +170,23 @@ fn update() !void {
         }
 
         if (rl.isKeyDown(.key_w)) {
-            state.ship.addThrust(delta, rl.isKeyDown(.key_left_shift));
+            state.ship.addThrust(
+                delta,
+                rl.isKeyDown(.key_left_shift),
+            );
+
+            if (state.frame % 12 == 0) {
+                rl.playSound(sound.thrust);
+                if (state.ship.is_using_mega_fuel) {
+                    rl.playSound(sound.mega_thrust);
+                }
+            }
         }
 
         // Shoot
         if (!state.ship.isInvulnerable() and rl.isKeyPressed(.key_space)) {
             if (state.ship.shoot()) {
+                rl.playSound(sound.pew);
                 try state.projectile.append(.{
                     .position = state.ship.position.add(Ship.drawing[0]),
                     .length = 2.5,
@@ -184,8 +227,7 @@ fn update() !void {
             // Lazer - Collision ship not mid mega-burst
             if (!state.ship.is_using_mega_fuel and projectile.position.distance(state.ship.position) < state.ship.hitbox()) {
                 if (!state.ship.isDead()) {
-                    state.ship.death_timestamp = now;
-                    try spawnExplosionParticles(state.ship.position, null);
+                    try loseLife();
                 }
             }
 
@@ -224,9 +266,7 @@ fn update() !void {
                 if (!asteroid.remove) {
                     try hitAsteroid(asteroid, state.ship.velocity);
                 }
-                state.ship.death_timestamp = now;
-                state.lives -= 1;
-                try spawnExplosionParticles(state.ship.position, null);
+                try loseLife();
             }
 
             if (asteroid.remove) {
@@ -429,7 +469,7 @@ fn drawAsteroid(drawing: *const Drawing, pos: Vector2, size: Asteroid.Size, seed
 fn hitAsteroid(asteroid: *Asteroid, impact_maybe: ?Vector2) !void {
     asteroid.remove = true;
     state.ship.refill();
-    state.score += 10;
+    state.score += asteroid.score();
     try spawnExplosionParticles(asteroid.position, rl.Color.brown);
 
     if (asteroid.size == .small) return;
@@ -449,6 +489,7 @@ fn hitAsteroid(asteroid: *Asteroid, impact_maybe: ?Vector2) !void {
 }
 
 fn spawnExplosionParticles(origin: Vector2, color: ?rl.Color) !void {
+    rl.playSound(sound.boom);
     const points_len = 100;
     for (0..points_len) |_| {
         const random_int = state.random.intRangeLessThan(usize, 0, 4);
@@ -484,4 +525,28 @@ fn spawnExplosionParticles(origin: Vector2, color: ?rl.Color) !void {
             },
         });
     }
+}
+
+fn getRelativePath(allocator: std.mem.Allocator, target_path: []const u8) ![:0]const u8 {
+    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    defer allocator.free(cwd_path);
+
+    const path = try std.fs.path.resolve(
+        allocator,
+        &.{
+            cwd_path,
+            target_path,
+        },
+    );
+    defer allocator.free(path);
+    const path_null = try allocator.dupeZ(u8, path);
+    return path_null;
+}
+
+fn loseLife() !void {
+    const now: f32 = @floatCast(rl.getTime());
+    state.ship.death_timestamp = now;
+    rl.playSound(sound.loser);
+    state.lives -= 1;
+    try spawnExplosionParticles(state.ship.position, null);
 }

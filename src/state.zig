@@ -14,4 +14,6 @@ pub const State = struct {
     random: std.Random,
     lives: usize,
     score: usize = 0,
+    level_start: f32,
+    frame: usize = 0,
 };

@@ -44,7 +44,7 @@ pub fn main() !void {
 
     const seed: u64 = @bitCast(std.time.timestamp());
     std.debug.print("[GAME] Seed: {}", .{seed});
-    var prng = std.rand.Xoshiro256.init(seed);
+    var prng = std.Random.Xoshiro256.init(seed);
 
     state = .{
         .ship = undefined,
@@ -447,7 +447,7 @@ fn render(drawing: *const Drawing) !void {
 }
 
 fn drawAsteroid(drawing: *const Drawing, pos: Vector2, size: Asteroid.Size, seed: u64) void {
-    var prng = std.rand.Xoshiro256.init(seed);
+    var prng = std.Random.Xoshiro256.init(seed);
     const rand = prng.random();
 
     var points = std

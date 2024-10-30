@@ -1,6 +1,6 @@
 .{
-    .name = "zig-game",
-    .version = "0.0.0",
+    .name = "zigsteroids",
+    .version = "1.0.0",
     .dependencies = .{
         .@"raylib-zig" = .{
             .url = "https://github.com/Not-Nik/raylib-zig/archive/19db777449c0f56ca621121a00087d341eb77080.tar.gz",

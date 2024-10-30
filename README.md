@@ -12,8 +12,10 @@ You have 3 lives, at 0 lives the game reset.
 
 - `W` - Go forward
 - `A`, `D` - Rotate Ship
-- `Left-Shift` - Use MEGA FUEL for burst, make you invulnerable while in burst -- use with caution.
 - `Left-Control + R` - Reset game
+- `Left-Shift` - Use MEGA FUEL for burst, make you invulnerable while in burst -- use with caution.
+- `Left-Control + D` - Toggle Visual Debug
+- `Escape` - Pause Game
 
 ## Build
 
@@ -21,12 +23,6 @@ To build and run:
 
 ```sh
 zig build run
-```
-
-To build and run with vizual debugging:
-
-```sh
-zig build run -- --debug-viz
 ```
 
 ## TODO

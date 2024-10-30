@@ -16,7 +16,8 @@ const SCALE = constants.SCALE;
 const LINE_THICKNESS = constants.LINE_THICKNESS;
 const CAMERA_SCALE = constants.CAMERA_SCALE;
 const SHIP_SCALE = constants.SHIP_SCALE;
-var DEBUG_VIZ = false;
+var is_visual_debug = false;
+var is_game_pause = false;
 
 var state: State = undefined;
 var sound: Sound = undefined;
@@ -25,13 +26,6 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer std.debug.assert(gpa.deinit() == .ok);
-    var args = try std.process.argsWithAllocator(allocator);
-    defer args.deinit();
-    while (args.next()) |arg| {
-        if (std.mem.eql(u8, arg, "--debug-viz")) {
-            DEBUG_VIZ = true;
-        }
-    }
 
     //--------------------------------------------------------------------------------------
     rl.initWindow(
@@ -45,6 +39,7 @@ pub fn main() !void {
 
     rl.initAudioDevice();
     defer rl.closeAudioDevice();
+    rl.setExitKey(.key_null);
     //--------------------------------------------------------------------------------------
 
     const seed: u64 = @bitCast(std.time.timestamp());
@@ -120,6 +115,7 @@ fn init() !void {
     state.lives = 4;
     state.score = 0;
     state.level_start = @floatCast(rl.getTime());
+    state.particles.clearRetainingCapacity();
     state.asteroids.clearRetainingCapacity();
     state.asteroids_queue.clearRetainingCapacity();
     const asteroids_count = 20;
@@ -147,59 +143,24 @@ fn reset() !void {
         .speed_turn = 1 * SCALE,
         .speed_forward = 24 * SCALE,
     };
-
-    state.particles.clearRetainingCapacity();
 }
 
 fn update() !void {
     const now: f32 = @floatCast(rl.getTime());
     const delta: f32 = @floatCast(rl.getFrameTime());
 
-    if (rl.isKeyDown(.key_left_control) and rl.isKeyDown(.key_r)) {
-        try init();
+    // Pause Game on Escape
+    if (rl.isKeyPressed(.key_escape)) {
+        is_game_pause = !is_game_pause;
     }
 
-    if (!state.ship.isDead()) {
-        // Ship Contorl
-        if (rl.isKeyDown(.key_a)) {
-            state.ship.turn(-1 * delta);
+    // Control Layer
+    if (rl.isKeyDown(.key_left_control)) {
+        if (rl.isKeyPressed(.key_r)) {
+            try init();
+        } else if (rl.isKeyPressed(.key_d)) {
+            is_visual_debug = !is_visual_debug;
         }
-
-        if (rl.isKeyDown(.key_d)) {
-            state.ship.turn(delta);
-        }
-
-        if (rl.isKeyDown(.key_w)) {
-            state.ship.addThrust(
-                delta,
-                rl.isKeyDown(.key_left_shift),
-            );
-
-            if (state.frame % 12 == 0) {
-                rl.playSound(sound.thrust);
-                if (state.ship.is_using_mega_fuel) {
-                    rl.playSound(sound.mega_thrust);
-                }
-            }
-        }
-
-        // Shoot
-        if (!state.ship.isInvulnerable() and rl.isKeyPressed(.key_space)) {
-            if (state.ship.shoot()) {
-                rl.playSound(sound.pew);
-                try state.projectile.append(.{
-                    .position = state.ship.position.add(Ship.drawing[0]),
-                    .length = 2.5,
-                    .ttl = 1,
-                    .rotation = state.ship.rotation,
-                    .velocity = state.ship
-                        .getShipDirection()
-                        .scale(30 * SCALE),
-                });
-            }
-        }
-
-        state.ship.update(delta, SCREEN_SIZE);
     }
 
     // add asteroids from queue
@@ -207,6 +168,56 @@ fn update() !void {
         try state.asteroids.append(asteroid);
     }
     state.asteroids_queue.clearRetainingCapacity();
+
+    if (is_game_pause) return;
+
+    // WARN: The Game is not pause from here on out!
+
+    // Normal Layer
+    if (rl.isKeyUp(.key_left_control)) {
+        if (!state.ship.isDead()) {
+            // Ship Contorl
+            if (rl.isKeyDown(.key_a)) {
+                state.ship.turn(-1 * delta);
+            }
+
+            if (rl.isKeyDown(.key_d)) {
+                state.ship.turn(delta);
+            }
+
+            if (rl.isKeyDown(.key_w)) {
+                state.ship.addThrust(
+                    delta,
+                    rl.isKeyDown(.key_left_shift),
+                );
+
+                if (state.frame % 12 == 0) {
+                    rl.playSound(sound.thrust);
+                    if (state.ship.is_using_mega_fuel) {
+                        rl.playSound(sound.mega_thrust);
+                    }
+                }
+            }
+
+            // Shoot
+            if (!state.ship.isInvulnerable() and rl.isKeyPressed(.key_space)) {
+                if (state.ship.shoot()) {
+                    rl.playSound(sound.pew);
+                    try state.projectile.append(.{
+                        .position = state.ship.position.add(Ship.drawing[0]),
+                        .length = 2.5,
+                        .ttl = 1,
+                        .rotation = state.ship.rotation,
+                        .velocity = state.ship
+                            .getShipDirection()
+                            .scale(30 * SCALE),
+                    });
+                }
+            }
+
+            state.ship.update(delta, SCREEN_SIZE);
+        }
+    }
 
     // Projectiles
     {
@@ -342,7 +353,7 @@ fn render(drawing: *const Drawing) !void {
             if (state.ship.isInvulnerable() and @mod(rl.getTime(), 0.25) >= 0.125) rl.Color.gray else rl.Color.white,
             true,
         );
-        if (DEBUG_VIZ) {
+        if (is_visual_debug) {
             rl.drawCircleLinesV(
                 state.ship.position,
                 state.ship.hitbox(),
@@ -359,7 +370,7 @@ fn render(drawing: *const Drawing) !void {
             asteroid.size,
             asteroid.seed,
         );
-        if (DEBUG_VIZ) {
+        if (is_visual_debug) {
             rl.drawCircleLinesV(
                 asteroid.position,
                 asteroid.size.hitbox(),

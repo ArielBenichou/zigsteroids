@@ -43,7 +43,7 @@ pub fn main() !void {
     //--------------------------------------------------------------------------------------
 
     const seed: u64 = @bitCast(std.time.timestamp());
-    std.debug.print("[GAME] Seed: {}", .{seed});
+    std.debug.print("[GAME] Seed: {}\n", .{seed});
     var prng = std.Random.Xoshiro256.init(seed);
 
     state = .{
@@ -118,7 +118,8 @@ fn init() !void {
     state.particles.clearRetainingCapacity();
     state.asteroids.clearRetainingCapacity();
     state.asteroids_queue.clearRetainingCapacity();
-    const asteroids_count = 20;
+    const asteroids_count: usize = @intFromFloat((SCREEN_SIZE.x + SCREEN_SIZE.y) / 100.0);
+    std.debug.print("[GAME] Spawned {} asteroids\n", .{asteroids_count});
     for (0..asteroids_count) |_| {
         const random_angle = std.math.tau * state.random.float(f32);
         const size = state.random.enumValue(Asteroid.Size);
